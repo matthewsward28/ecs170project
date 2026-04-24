@@ -11,16 +11,22 @@ class Setting_Train_Test_Load:
         self.evaluate = evaluate_obj
 
     def load_run_save_evaluate(self):
-        # Load train and test sets
-        loaded_train_data = self.dataset.load_train() 
-        loaded_test_data = self.dataset.load_test()
-        # Train model
-        self.method.data = loaded_train_data
-        self.method.train()
-        # Test model
-        prediction_y = self.method.test(loaded_test_data['X'])
-        # Save 
-        self.result.data = {'true_y': loaded_test_data['y'], 'pred_y': prediction_y}
+        # load data
+        loaded_data = self.dataset.load()
+        
+        # Separate train and test sets
+        train_set = loaded_data['train']
+        test_set = loaded_data['test']
+
+        # Training model
+        self.method.train(train_set['X'], train_set['y'])
+
+        # Testing model
+        prediction_y = self.method.test(test_set['X'])
+
+        # Save results
+        self.result.data = {'true_y': test_set['y'], 'pred_y': prediction_y}
         self.result.save()
-        # Evaluation metrics
-        return self.evaluate.evaluate(prediction_y, loaded_test_data['y'])
+
+        # Evaluate results
+        return self.evaluate.evaluate(prediction_y, test_set['y'])
