@@ -17,7 +17,7 @@ class Dataset_Loader(dataset):
         super().__init__(dName, dDescription)
     
     def load(self):
-        print('loading stage 2 data...')
+        print('loading data...')
         # Load train and test files
         train_data = self.load_csv(self.train_file_name)
         test_data = self.load_csv(self.test_file_name)
