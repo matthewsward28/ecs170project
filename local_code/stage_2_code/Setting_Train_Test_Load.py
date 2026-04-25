@@ -21,6 +21,9 @@ class Setting_Train_Test_Load:
         # Training model
         self.method.train(train_set['X'], train_set['y'])
 
+        # Capture loss history for plotting
+        history = self.method.train(train_set['X'], train_set['y'])
+
         # Testing model
         prediction_y = self.method.test(test_set['X'])
 
@@ -29,4 +32,4 @@ class Setting_Train_Test_Load:
         self.result.save()
 
         # Evaluate results
-        return self.evaluate.evaluate(prediction_y, test_set['y'])
+        return self.evaluate.evaluate(prediction_y, test_set['y']), history

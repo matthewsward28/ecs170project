@@ -58,6 +58,9 @@ class Method_MLP(method, nn.Module):
         # check here for the nn.CrossEntropyLoss doc: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         loss_function = nn.CrossEntropyLoss()
 
+        # For the plot
+        loss_history = []
+
         # it will be an iterative gradient updating process
         # we don't do mini-batch, we use the whole input as one batch
         # you can try to split X and y into smaller-sized batches by yourself
@@ -77,11 +80,16 @@ class Method_MLP(method, nn.Module):
             # check here for the opti.step doc: https://pytorch.org/docs/stable/optim.html
             # update the variables according to the optimizer and the gradients calculated by the above loss.backward function
             optimizer.step()
+            
+            # Record the loss for plotting
+            loss_history.append(train_loss.item())
 
             if epoch % 100 == 0:
                 pred_labels = y_pred.max(1)[1]
                 acc = (pred_labels == y_true).float().mean()
                 print(f"Epoch {epoch} | Accuracy: {acc.item():.4f} | Loss: {train_loss.item():.4f}")
+            
+        return loss_history
     
     def test(self, X):
         # do the testing, and result the result

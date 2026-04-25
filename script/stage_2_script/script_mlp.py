@@ -5,6 +5,7 @@ from local_code.stage_2_code.Setting_Train_Test_Load import Setting_Train_Test_L
 from local_code.stage_2_code.Evaluate_Metrics import Evaluate_Metrics
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 if 1:
     # parameters
@@ -35,6 +36,16 @@ if 1:
     # Running section
     print('************ Start Stage 2 ************')
     setting_obj.prepare(data_obj, method_obj, result_obj, evaluate_obj)
+
+    # Plotting section
+    plt.plot(range(1, len(loss_history) + 1), loss_history, color='blue', label='Training Loss')
+    plt.xlabel('Training Epoch')
+    plt.ylabel('Loss Value')
+    plt.title('MLP Training Convergence (Stage 2)')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('./result/stage_2_result/learning_curve.png') # Save to results folder
+    plt.show()
     
     # Returns a dictionary of metrics
     metrics = setting_obj.load_run_save_evaluate()
