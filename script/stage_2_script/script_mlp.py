@@ -36,6 +36,7 @@ if 1:
     # Running section
     print('************ Start Stage 2 ************')
     setting_obj.prepare(data_obj, method_obj, result_obj, evaluate_obj)
+    metrics, loss_history = setting_obj.load_run_save_evaluate()
 
     # Plotting section
     plt.plot(range(1, len(loss_history) + 1), loss_history, color='blue', label='Training Loss')
