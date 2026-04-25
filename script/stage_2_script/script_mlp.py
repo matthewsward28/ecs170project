@@ -48,10 +48,7 @@ if 1:
     # Save to results folder
     plt.savefig('./result/stage_2_result/learning_curve.png') 
     plt.show()
-    
-    # Returns a dictionary of metrics
-    metrics = setting_obj.load_run_save_evaluate()
-    
+
     print('************ Overall Performance ************')
     for metric_name, value in metrics.items():
         print(f'{metric_name}: {value}')

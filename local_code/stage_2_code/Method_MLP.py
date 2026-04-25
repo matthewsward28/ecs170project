@@ -29,10 +29,10 @@ class Method_MLP(method, nn.Module):
         self.fc_layer_1 = nn.Linear(784, 128)
         # check here for nn.ReLU doc: https://pytorch.org/docs/stable/generated/torch.nn.ReLU.html
         self.activation_func_1 = nn.ReLU()
-        self.fc_layer_2 = nn.Linear(128, 64)
+        self.fc_layer_2 = nn.Linear(128, 10)
         # check here for nn.Softmax doc: https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
         self.activation_func_2 = nn.ReLU()
-        self.fc_layer_3 = nn.Linear(64, 10)
+
 
     # it defines the forward propagation function for input x
     # this function will calculate the output layer by layer
@@ -41,12 +41,11 @@ class Method_MLP(method, nn.Module):
         '''Forward propagation'''
         # hidden layer embeddings
         h = self.activation_func_1(self.fc_layer_1(x))
-        h = self.activation_func_2(self.fc_layer_2(h))
         # outout layer result
         # self.fc_layer_2(h) will be a nx2 tensor
         # n (denotes the input instance number): 0th dimension; 2 (denotes the class number): 1st dimension
         # we do softmax along dim=1 to get the normalized classification probability distributions for each instance
-        y_pred = self.fc_layer_3(h)
+        y_pred = self.fc_layer_2(h)
         return y_pred
 
     # backward error propagation will be implemented by pytorch automatically
