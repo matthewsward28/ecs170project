@@ -44,7 +44,8 @@ if 1:
     plt.title('MLP Training Convergence (Stage 2)')
     plt.legend()
     plt.grid(True)
-    plt.savefig('./result/stage_2_result/learning_curve.png') # Save to results folder
+    # Save to results folder
+    plt.savefig('./result/stage_2_result/learning_curve.png') 
     plt.show()
     
     # Returns a dictionary of metrics
