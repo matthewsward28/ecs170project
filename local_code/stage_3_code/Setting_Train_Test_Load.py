@@ -1,4 +1,3 @@
-
 class Setting_Train_Test_Load:
     def __init__(self, setting_name, setting_description):
         self.setting_name = setting_name
@@ -13,23 +12,21 @@ class Setting_Train_Test_Load:
     def load_run_save_evaluate(self):
         # load data
         loaded_data = self.dataset.load()
-        
-        # Separate train and test sets
         train_set = loaded_data['train']
         test_set = loaded_data['test']
 
-        # Training model
-        self.method.train(train_set['X'], train_set['y'])
-
-        # Capture loss history for plotting
+        # training model and capture loss history for plotting
+        print('training model...')
         history = self.method.train(train_set['X'], train_set['y'])
 
-        # Testing model
+        # testing model
+        print('testing model...')
         prediction_y = self.method.test(test_set['X'])
 
-        # Save results
+        # save results
         self.result.data = {'true_y': test_set['y'], 'pred_y': prediction_y}
         self.result.save()
 
-        # Evaluate results
+        # evaluate results
+        # return metrics and history for the script to use
         return self.evaluate.evaluate(prediction_y, test_set['y']), history
