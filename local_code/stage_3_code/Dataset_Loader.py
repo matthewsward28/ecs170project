@@ -9,15 +9,24 @@ from local_code.base_class.dataset import dataset
 import pickle
 import numpy as np
 import torch
+import os
 
 class Dataset_Loader(dataset):
     def __init__(self, dName=None, dDescription=None):
         super().__init__(dName, dDescription)
-        self.dataset_source_folder_path = None
-        self.dataset_file_name = None
+        # initialize with empty strings instead of None to prevent concatenation errors
+        self.dataset_source_folder_path = ""
+        self.dataset_file_name = dName if dName else ""
+        self.channel = 1
+        self.height = 28
+        self.width = 28
 
     def load(self):
-        full_path = self.dataset_source_folder_path + self.dataset_file_name
+        # use os.path.join for safer path concatenation
+        # this joins './data/stage_3_data/' and 'MNIST' correctly
+        full_path = os.path.join(self.dataset_source_folder_path, self.dataset_file_name)
+        
+        print(f"Attempting to load: {full_path}")
         
         # load the pickle file
         with open(full_path, 'rb') as f:
@@ -34,14 +43,13 @@ class Dataset_Loader(dataset):
         y = []
         
         for instance in data_list:
-            # image_matrix is already a 2D or 3D numpy array from the pickle
             image = np.array(instance['image'])
             label = instance['label']
             
-            # normalize pixels to [0, 1]
+            # Normalize
             image = image / 255.0
             
-            # adjust labels for ORL
+            # label adjustment for ORL
             if self.dataset_name == 'ORL' and label > 0:
                 label -= 1
                 
@@ -51,16 +59,13 @@ class Dataset_Loader(dataset):
         X = np.array(X)
         y = np.array(y)
         
-        # Handle Channels [Batch, Channel, Height, Width]
-        # MNIST is (N, 28, 28) -> needs to be (N, 1, 28, 28)
-        # CIFAR/ORL is (N, H, W, 3) -> needs to be (N, 3, H, W)
-        if len(X.shape) == 3: # Grayscale (MNIST)
+        # dimension handling
+        if len(X.shape) == 3: # (N, H, W) -> (N, 1, H, W)
             X = np.expand_dims(X, axis=1)
-        elif len(X.shape) == 4: # Color (CIFAR/ORL)
-            # PyTorch expects (Channels, Height, Width), but Pickle usually has (Height, Width, Channels)
+        elif len(X.shape) == 4: # (N, H, W, C) -> (N, C, H, W)
             X = np.transpose(X, (0, 3, 1, 2))
             
             if self.dataset_name == 'ORL':
-                X = X[:, 0:1, :, :] # Keep only R channel
+                X = X[:, 0:1, :, :]
                 
         return {'X': torch.FloatTensor(X), 'y': torch.LongTensor(y)}

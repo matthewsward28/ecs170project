@@ -17,7 +17,7 @@ class Setting_Train_Test_Load:
 
         # training model and capture loss history for plotting
         print('training model...')
-        history = self.method.train(train_set['X'], train_set['y'])
+        history = self.method.train_model(train_set['X'], train_set['y'])
 
         # testing model
         print('testing model...')

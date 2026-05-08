@@ -14,10 +14,9 @@ if 1:
 
     # object initialization
     # data Loader for stage 3: CIFAR
-    data_obj = Dataset_Loader('CIFAR', 'colored object recognition')
-    data_obj.dataset_source_folder_path = './data/stage_3_data/CIFAR/' 
-    data_obj.train_file_name = 'train.csv' 
-    data_obj.test_file_name = 'test.csv'
+    data_obj = Dataset_Loader('CIFAR', '')
+    data_obj.dataset_source_folder_path = './data/stage_3_data/' 
+    data_obj.dataset_file_name = 'CIFAR'
     
     # set dimensions for CIFAR-10 (32x32 RGB)
     data_obj.channel = 3

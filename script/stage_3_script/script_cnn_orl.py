@@ -14,7 +14,7 @@ if 1:
 
     # object initialization
     # data Loader for stage 3: ORL
-    data_obj = Dataset_Loader('ORL', '')
+    data_obj = Dataset_Loader('ORL', 'face recognition')
     data_obj.dataset_source_folder_path = './data/stage_3_data/' 
     data_obj.dataset_file_name = 'ORL'
     

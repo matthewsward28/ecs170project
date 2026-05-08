@@ -13,7 +13,7 @@ import numpy as np
 class Method_CNN_MNIST(method, nn.Module):
     data = None
     # it defines the max rounds to train the model
-    max_epoch = 50
+    max_epoch = 20
     # it defines the learning rate for gradient descent based optimizer for model learning
     learning_rate = 1e-3
 
@@ -37,6 +37,12 @@ class Method_CNN_MNIST(method, nn.Module):
             nn.Conv2d(16, 32, 5, 1, 2),
             nn.ReLU(),
             nn.MaxPool2d(2) # Resulting shape: 32 x 7 x 7
+        )
+
+        self.conv_layer_3 = nn.Sequential(
+            nn.Conv2d(32, 64, 3, 1, 1), # Use a smaller 3x3 kernel for deeper layers
+            nn.ReLU(),
+            nn.MaxPool2d(2)
         )
         
         # Output layer: fully connected layer
@@ -63,7 +69,7 @@ class Method_CNN_MNIST(method, nn.Module):
     # backward error propagation will be implemented by pytorch automatically
     # so we don't need to define the error backpropagation function here
 
-    def train(self, X, y):
+    def train_model(self, X, y):
         # check here for the torch.optim doc: https://pytorch.org/docs/stable/optim.html
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         # check here for the nn.CrossEntropyLoss doc: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html

@@ -14,7 +14,7 @@ class Method_CNN_CIFAR(method, nn.Module):
     data = None
     # it defines the max rounds to train the model
     # CIFAR is more complex, so we use 100 epochs to allow convergence
-    max_epoch = 100
+    max_epoch = 20
     # it defines the learning rate for gradient descent based optimizer for model learning
     learning_rate = 1e-3
 
@@ -40,10 +40,16 @@ class Method_CNN_CIFAR(method, nn.Module):
             nn.MaxPool2d(kernel_size=2) # 16x16 -> 8x8
         )
 
+        self.conv_column_3 = nn.Sequential(
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2) # 8x8 -> 4x4
+        )
+
         # Final Fully Connected layers
         # check here for nn.Linear doc: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
         # 64 filters * 8 * 8 pixels = 4096 input features
-        self.fc_layer_1 = nn.Linear(64 * 8 * 8, 512)
+        self.fc_layer_1 = nn.Linear(64 * 4 * 4, 512) 
         self.activation_func_1 = nn.ReLU()
         self.fc_layer_2 = nn.Linear(512, 10)
 
@@ -55,6 +61,7 @@ class Method_CNN_CIFAR(method, nn.Module):
         # convolution layers
         h = self.conv_column_1(x)
         h = self.conv_column_2(h)
+        h = self.conv_column_3(h)
         
         # flatten the output for the fully connected layer
         # h.size(0) denotes the batch size
@@ -71,14 +78,14 @@ class Method_CNN_CIFAR(method, nn.Module):
     # backward error propagation will be implemented by pytorch automatically
     # so we don't need to define the error backpropagation function here
 
-    def train(self, X, y):
+    def train_model(self, X, y):
         # check here for the torch.optim doc: https://pytorch.org/docs/stable/optim.html
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         # check here for the nn.CrossEntropyLoss doc: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         loss_function = nn.CrossEntropyLoss()
 
         # it defines the size of the mini-batch
-        batch_size = 64
+        batch_size = 128
         # For the plot
         loss_history = []
 
@@ -129,12 +136,14 @@ class Method_CNN_CIFAR(method, nn.Module):
         return loss_history
     
     def test(self, X):
+        self.eval()
         # do the testing, and result the result
         # disable gradient calculation for efficiency during testing
         with torch.no_grad():
             y_pred = self.forward(torch.FloatTensor(np.array(X)))
         # convert the probability distributions to the corresponding labels
         # instances will get the labels corresponding to the largest probability
+        self.train() # set back to train mode after testing
         return y_pred.max(1)[1]
     
     def run(self):

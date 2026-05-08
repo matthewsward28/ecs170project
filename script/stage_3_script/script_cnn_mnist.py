@@ -14,10 +14,9 @@ if 1:
 
     # object initialization
     # data Loader for stage 3: MNIST
-    data_obj = Dataset_Loader('MNIST', 'hand-written digit recognition')
-    data_obj.dataset_source_folder_path = './data/stage_3_data/MNIST/' 
-    data_obj.train_file_name = 'train.csv' 
-    data_obj.test_file_name = 'test.csv'
+    data_obj = Dataset_Loader('MNIST', '')
+    data_obj.dataset_source_folder_path = './data/stage_3_data/' 
+    data_obj.dataset_file_name = 'MNIST'
     
     # set dimensions for MNIST (28x28 grayscale)
     data_obj.channel = 1
