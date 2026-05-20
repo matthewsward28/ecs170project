@@ -91,6 +91,52 @@ class Dataset_Loader(dataset):
             
         return data_splits
 
+    def load_generation_data(self, base_path):
+        '''Read raw joke text lines from the CSV-formatted data file while stripping indices'''
+        X_raw_tokens = []
+        
+        # Look for the jokes data file inside the specified root location path
+        file = ['data']
+        target_file = None
+        
+        for candidate in file:
+            check_path = os.path.join(base_path, candidate)
+            if os.path.exists(check_path):
+                target_file = check_path
+                break
+                
+        if target_file is None:
+            if os.path.isfile(base_path):
+                target_file = base_path
+            else:
+                for file_name in os.listdir(base_path):
+                    if not file_name.endswith('.docx') and not file_name.startswith('.'):
+                        target_file = os.path.join(base_path, file_name)
+                        break
+
+        if target_file is None:
+            raise FileNotFoundError(f"Could not locate the text joke generation file inside: {base_path}")
+            
+        print(f"Reading generation elements from: {target_file}")
+        with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            
+            # Iterate through lines, skipping the header index row (Line 0: "ID","Joke")
+            for line in lines[1:]:
+                line = line.strip()
+                if line:
+                    # Strip the ID index number and leading comma (e.g., '1,"What did..."' -> '"What did..."')
+                    # We look for the first comma split
+                    parts = line.split(',', 1)
+                    if len(parts) > 1:
+                        joke_text = parts[1].strip().strip('"') # Remove wrapping quotation marks
+                        tokens = self.clean_text(joke_text)
+                        
+                        if len(tokens) > 3: # Only collect jokes with functional text length
+                            X_raw_tokens.append(tokens)
+                        
+        return X_raw_tokens
+    
     def load(self):
         '''Main loader driver routing the data processing to text pipeline steps'''
         full_path = os.path.join(self.dataset_source_folder_path, self.dataset_file_name)
@@ -120,9 +166,47 @@ class Dataset_Loader(dataset):
             
         # Text Generation
         elif self.dataset_name == 'text_generation':
-            print("Text generation data load requested.")
-            # Implementation to be added when setting up text generation
-            return {'train': {}, 'test': {}}
+            raw_jokes_tokens = self.load_generation_data(full_path)
+            
+            # Construct dictionary indices from all available jokes documents text strings
+            self.build_vocabulary(raw_jokes_tokens)
+            print(f"Vocabulary successfully built for generation. Total vocabulary size: {len(self.vocab)}")
+            
+            X_sequences = []
+            y_sequences = []
+            
+            # Slide a sequence window over each joke to set up next-word target pairs
+            # For each token index t: X contains tokens up to t, y contains the token at t+1
+            for tokens in raw_jokes_tokens:
+                # Convert whole joke line to integer tokens array matches
+                numerical_tokens = [self.vocab[token] if token in self.vocab else self.vocab['<UNK>'] for token in tokens]
+                
+                for i in range(1, len(numerical_tokens)):
+                    sub_seq = numerical_tokens[:i]
+                    target_word = numerical_tokens[i]
+                    
+                    # Pad short history lists to match a uniform max_sequence_length configuration
+                    if len(sub_seq) > self.max_sequence_length:
+                        sub_seq = sub_seq[-self.max_sequence_length:]
+                    else:
+                        sub_seq = [self.vocab['<PAD>']] * (self.max_sequence_length - len(sub_seq)) + sub_seq
+                        
+                    X_sequences.append(sub_seq)
+                    y_sequences.append(target_word)
+                    
+            print(f"Total sliced processing sequences generated: {len(X_sequences)}")
+            
+            # Since generation tasks utilize auto-regressive generation, we use the same pool as our testing benchmark
+            return {
+                'train': {
+                    'X': torch.LongTensor(np.array(X_sequences)), 
+                    'y': torch.LongTensor(np.array(y_sequences))
+                },
+                'test': {
+                    'X': torch.LongTensor(np.array(X_sequences)), 
+                    'y': torch.LongTensor(np.array(y_sequences))
+                }
+            }
             
         else:
             raise ValueError(f"Unknown dataset identity definition: {self.dataset_name}")

@@ -1,5 +1,5 @@
 '''
-Concrete MethodModule class for a specific sequential learning MethodModule
+Concrete MethodModule class for an advanced gated sequential learning MethodModule (LSTM)
 '''
 # Copyright (c) 2017-Current Jiawei Zhang <jiawei@ifmlab.org>
 # License: TBD
@@ -10,15 +10,15 @@ from torch import nn
 import numpy as np
 
 
-class Method_RNN_Text(method, nn.Module):
+class Method_LSTM_Text(method, nn.Module):
     data = None
     # it defines the max rounds to train the model
-    # text datasets are complex, 20 epochs provides a clear look at optimization paths
+    # LSTMs converge faster due to stable gradient highways; 20 epochs is perfect for comparison
     max_epoch = 20
     # it defines the learning rate for gradient descent based optimizer for model learning
     learning_rate = 1e-3
 
-    # it defines the the RNN model architecture,
+    # it defines the the LSTM model architecture,
     # how many layers, embedding size, recurrent hidden dimensions, activation function, etc.
     # the size of the input/output portal of the model architecture should be consistent with our data input and desired output
     def __init__(self, mName, mDescription, vocab_size=15000, embedding_dim=128, hidden_dim=128):
@@ -30,14 +30,14 @@ class Method_RNN_Text(method, nn.Module):
         # check here for nn.Embedding doc: https://pytorch.org/docs/stable/generated/torch.nn.Embedding.html
         self.embedding_layer = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
         
-        # Vanilla Recurrent Neural Network Block
-        # Processes the sequential elements step-by-step
+        # Long Short-Term Memory Block
+        # Replaces vanilla nn.RNN to introduce internal gate arrays (Forget, Input, Output)
         # batch_first=True expects matrix dimensions organized as [Batch, Sequence_Length, Embedding_Dim]
-        # check here for nn.RNN doc: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
-        self.rnn_layer = nn.RNN(input_size=embedding_dim, hidden_size=hidden_dim, batch_first=True)
+        # check here for nn.LSTM doc: https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+        self.lstm_layer = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_dim, batch_first=True)
         
         # Final Fully Connected layers for sentiment classification
-        # Projects the recurrent hidden representations into binary categories (Negative vs Positive)
+        # Projects the gated hidden representations into binary categories (Negative vs Positive)
         # check here for nn.Linear doc: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
         self.fc_layer_1 = nn.Linear(hidden_dim, 64)
         self.activation_func_1 = nn.ReLU()
@@ -49,14 +49,15 @@ class Method_RNN_Text(method, nn.Module):
         # output shape: [Batch Size, Sequence Length, Embedding Dim]
         embedded = self.embedding_layer(x)
         
-        # Propagate embeddings through sequential recurrent hidden elements
-        # rnn_out shape: [Batch Size, Sequence Length, Hidden Dim]
-        # hidden_n shape: [1, Batch Size, Hidden Dim] representing final temporal sequence states
-        rnn_out, hidden_n = self.rnn_layer(embedded)
+        # Propagate embeddings through sequential LSTM gated cell blocks
+        # lstm_out shape: [Batch Size, Sequence Length, Hidden Dim]
+        # hn shape: [1, Batch Size, Hidden Dim] representing final temporal sequence hidden state
+        # cn shape: [1, Batch Size, Hidden Dim] representing final temporal sequence cell state
+        lstm_out, (hn, cn) = self.lstm_layer(embedded)
         
         # Isolate the final step hidden states to summarize information from entire sentences
         # Shape transforms from [1, Batch, Hidden] to [Batch, Hidden]
-        h = hidden_n.squeeze(0)
+        h = hn.squeeze(0)
         
         # Fully connected projection layers
         h = self.activation_func_1(self.fc_layer_1(h))
@@ -75,13 +76,12 @@ class Method_RNN_Text(method, nn.Module):
         # check here for the nn.CrossEntropyLoss doc: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         loss_function = nn.CrossEntropyLoss()
 
-        # It defines the size of the mini-batch (Lowered to 32 for memory protection)
+        # It defines the size of the mini-batch (Maintained at 32 for memory protection)
         batch_size = 32
         # For the plot
         loss_history = []
 
         # Keep dataset arrays as flat, raw NumPy structures instead of giant Tensor object allocations.
-        # This keeps the master dataset sitting passively in system memory instead of heavy active RAM.
         X_array = np.array(X)
         y_array = np.array(y)
         num_samples = X_array.shape[0]
@@ -113,8 +113,7 @@ class Method_RNN_Text(method, nn.Module):
                 # update the variables according to the optimizer and the gradients
                 optimizer.step()
 
-                # Explicitly isolate scalar float numbers via .item(). 
-                # Storing 'train_loss' directly keeps whole computational history graphs alive in memory loops.
+                # Explicitly isolate scalar float numbers via .item() to preserve memory overhead
                 epoch_loss += train_loss.item()
 
             # Record the average loss of all batches for plotting
@@ -132,8 +131,7 @@ class Method_RNN_Text(method, nn.Module):
     def test(self, X):
         self.eval()
         
-        # Testing over all 25,000 test reviews at once builds a giant evaluation graph.
-        # We loop over the test set in mini-batches to keep memory footprints low.
+        # Loop over the test set in mini-batches to keep memory footprints low.
         X_array = np.array(X)
         num_samples = X_array.shape[0]
         batch_size = 64
