@@ -34,7 +34,7 @@ class Method_RNN_Text(method, nn.Module):
         # Processes the sequential elements step-by-step
         # batch_first=True expects matrix dimensions organized as [Batch, Sequence_Length, Embedding_Dim]
         # check here for nn.RNN doc: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
-        self.rnn_layer = nn.RNN(input_size=embedding_dim, hidden_size=hidden_dim, batch_size_first=True)
+        self.rnn_layer = nn.RNN(input_size=embedding_dim, hidden_size=hidden_dim, batch_first=True)
         
         # Final Fully Connected layers for sentiment classification
         # Projects the recurrent hidden representations into binary categories (Negative vs Positive)
