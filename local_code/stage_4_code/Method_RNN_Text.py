@@ -1,5 +1,5 @@
 '''
-Concrete MethodModule class for a specific learning MethodModule
+Concrete MethodModule class for a specific sequential learning MethodModule
 '''
 # Copyright (c) 2017-Current Jiawei Zhang <jiawei@ifmlab.org>
 # License: TBD
@@ -10,64 +10,55 @@ from torch import nn
 import numpy as np
 
 
-class Method_CNN_CIFAR(method, nn.Module):
+class Method_RNN_Text(method, nn.Module):
     data = None
     # it defines the max rounds to train the model
-    # CIFAR is more complex, so we use 100 epochs to allow convergence
+    # text datasets are complex, 20 epochs provides a clear look at optimization paths
     max_epoch = 20
     # it defines the learning rate for gradient descent based optimizer for model learning
     learning_rate = 1e-3
 
-    # it defines the the CNN model architecture, e.g.,
-    # how many layers, size of variables in each layer, activation function, etc.
+    # it defines the the RNN model architecture,
+    # how many layers, embedding size, recurrent hidden dimensions, activation function, etc.
     # the size of the input/output portal of the model architecture should be consistent with our data input and desired output
-    def __init__(self, mName, mDescription):
+    def __init__(self, mName, mDescription, vocab_size=15000, embedding_dim=128, hidden_dim=128):
         method.__init__(self, mName, mDescription)
         nn.Module.__init__(self)
         
-        # Conv Block 1: Input 3 channels (RGB), output 32 filters, 3x3 kernel
-        # check here for nn.Conv2d doc: https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
-        self.conv_column_1 = nn.Sequential(
-            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2) # 32x32 -> 16x16
-        )
+        # Word Embedding Layer
+        # Maps word indices into a dense, continuous vector space
+        # check here for nn.Embedding doc: https://pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+        self.embedding_layer = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
         
-        # Conv Block 2: Input 32 filters, output 64 filters, 3x3 kernel
-        self.conv_column_2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2) # 16x16 -> 8x8
-        )
-
-        self.conv_column_3 = nn.Sequential(
-            nn.Conv2d(64, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2) # 8x8 -> 4x4
-        )
-
-        # Final Fully Connected layers
+        # Vanilla Recurrent Neural Network Block
+        # Processes the sequential elements step-by-step
+        # batch_first=True expects matrix dimensions organized as [Batch, Sequence_Length, Embedding_Dim]
+        # check here for nn.RNN doc: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
+        self.rnn_layer = nn.RNN(input_size=embedding_dim, hidden_size=hidden_dim, batch_size_first=True)
+        
+        # Final Fully Connected layers for sentiment classification
+        # Projects the recurrent hidden representations into binary categories (Negative vs Positive)
         # check here for nn.Linear doc: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
-        # 64 filters * 8 * 8 pixels = 4096 input features
-        self.fc_layer_1 = nn.Linear(64 * 4 * 4, 512) 
+        self.fc_layer_1 = nn.Linear(hidden_dim, 64)
         self.activation_func_1 = nn.ReLU()
-        self.fc_layer_2 = nn.Linear(512, 10)
-
-    # it defines the forward propagation function for input x
-    # this function will calculate the output layer by layer
+        self.fc_layer_2 = nn.Linear(64, 2)
 
     def forward(self, x):
         '''Forward propagation'''
-        # convolution layers
-        h = self.conv_column_1(x)
-        h = self.conv_column_2(h)
-        h = self.conv_column_3(h)
+        # Convert index integer tokens to dense feature coordinates
+        # output shape: [Batch Size, Sequence Length, Embedding Dim]
+        embedded = self.embedding_layer(x)
         
-        # flatten the output for the fully connected layer
-        # h.size(0) denotes the batch size
-        h = h.view(h.size(0), -1)
+        # Propagate embeddings through sequential recurrent hidden elements
+        # rnn_out shape: [Batch Size, Sequence Length, Hidden Dim]
+        # hidden_n shape: [1, Batch Size, Hidden Dim] representing final temporal sequence states
+        rnn_out, hidden_n = self.rnn_layer(embedded)
         
-        # hidden layer embeddings
+        # Isolate the final step hidden states to summarize information from entire sentences
+        # Shape transforms from [1, Batch, Hidden] to [Batch, Hidden]
+        h = hidden_n.squeeze(0)
+        
+        # Fully connected projection layers
         h = self.activation_func_1(self.fc_layer_1(h))
         
         # output layer result
@@ -85,12 +76,12 @@ class Method_CNN_CIFAR(method, nn.Module):
         loss_function = nn.CrossEntropyLoss()
 
         # it defines the size of the mini-batch
-        batch_size = 128
+        batch_size = 64
         # For the plot
         loss_history = []
 
-        # Convert input to tensors for pytorch operation
-        X_tensor = torch.FloatTensor(np.array(X))
+        # Convert input matrix data sequences to integer LongTensors for text index retrieval
+        X_tensor = torch.LongTensor(np.array(X))
         y_tensor = torch.LongTensor(np.array(y))
         num_samples = X_tensor.size(0)
 
@@ -127,7 +118,7 @@ class Method_CNN_CIFAR(method, nn.Module):
             avg_loss = epoch_loss / (num_samples / batch_size)
             loss_history.append(avg_loss)
 
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 # Calculate accuracy on the last batch of the epoch for tracking
                 pred_labels = y_pred.max(1)[1]
                 acc = (pred_labels == y_batch).float().mean()
@@ -140,7 +131,7 @@ class Method_CNN_CIFAR(method, nn.Module):
         # do the testing, and result the result
         # disable gradient calculation for efficiency during testing
         with torch.no_grad():
-            y_pred = self.forward(torch.FloatTensor(np.array(X)))
+            y_pred = self.forward(torch.LongTensor(np.array(X)))
         # convert the probability distributions to the corresponding labels
         # instances will get the labels corresponding to the largest probability
         self.train() # set back to train mode after testing
@@ -149,7 +140,7 @@ class Method_CNN_CIFAR(method, nn.Module):
     def run(self):
         print('method running...')
         print('--start training...')
-        self.train(self.data['train']['X'], self.data['train']['y'])
+        self.train_model(self.data['train']['X'], self.data['train']['y'])
         print('--start testing...')
         pred_y = self.test(self.data['test']['X'])
         return {'pred_y': pred_y, 'true_y': self.data['test']['y']}
