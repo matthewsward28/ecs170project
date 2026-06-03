@@ -1,5 +1,5 @@
 '''
-Concrete MethodModule class for a specific sequential learning MethodModule (GRU)
+Concrete MethodModule class for a semi-supervised Graph Convolutional Network MethodModule (GCN)
 '''
 # Copyright (c) 2017-Current Jiawei Zhang <jiawei@ifmlab.org>
 # License: TBD
@@ -10,147 +10,123 @@ from torch import nn
 import numpy as np
 
 
-class Method_GRU_Text(method, nn.Module):
+class Method_GCN(method, nn.Module):
     data = None
     # it defines the max rounds to train the model
-    # GRUs offer fast iteration cycles; 20 epochs provides a clean baseline look
-    max_epoch = 20
+    # GCN semi-supervised nodes train efficiently across complete graph passes; 200 epochs is standard
+    max_epoch = 200
     # it defines the learning rate for gradient descent based optimizer for model learning
-    learning_rate = 1e-3
+    learning_rate = 1e-2
 
-    # it defines the the GRU model architecture,
-    # how many layers, embedding size, recurrent hidden dimensions, activation function, etc.
+    # it defines the GCN model architecture,
+    # how many layers, feature input dimensions, internal representations, dropout limits, etc.
     # the size of the input/output portal of the model architecture should be consistent with our data input and desired output
-    def __init__(self, mName, mDescription, vocab_size=15000, embedding_dim=128, hidden_dim=128):
+    def __init__(self, mName, mDescription, in_features=1433, hidden_dim=16, num_classes=7):
         method.__init__(self, mName, mDescription)
         nn.Module.__init__(self)
         
-        # Word Embedding Layer
-        # Maps word indices into a dense, continuous vector space
-        # check here for nn.Embedding doc: https://pytorch.org/docs/stable/generated/torch.nn.Embedding.html
-        self.embedding_layer = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
-        
-        # Gated Recurrent Unit Block
-        # Replaces nn.RNN/nn.LSTM with a specialized, highly efficient two-gate structure
-        # batch_first=True expects matrix dimensions organized as [Batch, Sequence_Length, Embedding_Dim]
-        # check here for nn.GRU doc: https://pytorch.org/docs/stable/generated/torch.nn.GRU.html
-        self.gru_layer = nn.GRU(input_size=embedding_dim, hidden_size=hidden_dim, batch_first=True)
-        
-        # Final Fully Connected layers for sentiment classification
-        # Projects the gated hidden representations into binary categories (Negative vs Positive)
-        # check here for nn.Linear doc: https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
-        self.fc_layer_1 = nn.Linear(hidden_dim, 64)
+        # First Graph Convolutional Layer weight projection parameters
+        # Maps input continuous features into a compressed low-dimensional hidden embedding space
+        self.gc_layer_1 = nn.Linear(in_features, hidden_dim)
         self.activation_func_1 = nn.ReLU()
-        self.fc_layer_2 = nn.Linear(64, 2)
+        
+        # Dropout structural element to prevent overfitting during tiny stratified mask optimizations
+        self.dropout_layer = nn.Dropout(p=0.5)
+        
+        # Second Graph Convolutional Layer weight projection parameters
+        # Projects the mixed neighborhood message representation directly into target multi-class categories
+        self.gc_layer_2 = nn.Linear(hidden_dim, num_classes)
 
-    def forward(self, x):
-        '''Forward propagation'''
-        # Convert index integer tokens to dense feature coordinates
-        # output shape: [Batch Size, Sequence Length, Embedding Dim]
-        embedded = self.embedding_layer(x)
+    def forward(self, x, adj):
+        '''Forward propagation implementing structural neighborhood aggregate transformations'''
+        # Propagate the first linear map and multiply by the normalized adjacency matrix structure
+        # Graph Operation formula: Z = A_norm * X * W_1
+        h = self.gc_layer_1(x)
+        h = torch.spmm(adj, h)
+        h = self.activation_func_1(h)
+        h = self.dropout_layer(h)
         
-        # Propagate embeddings through sequential GRU gated recurrent elements
-        # gru_out shape: [Batch Size, Sequence Length, Hidden Dim]
-        # hidden_n shape: [1, Batch Size, Hidden Dim] representing single unified stream states
-        gru_out, hidden_n = self.gru_layer(embedded)
-        
-        # Isolate the final step hidden states to summarize information from entire sentences
-        # Shape transforms from [1, Batch, Hidden] to [Batch, Hidden]
-        h = hidden_n.squeeze(0)
-        
-        # Fully connected projection layers
-        h = self.activation_func_1(self.fc_layer_1(h))
-        
-        # output layer result
-        # we return raw logits, CrossEntropyLoss will handle normalized probability distributions
-        y_pred = self.fc_layer_2(h)
+        # Propagate the second linear map and perform final structural context aggregation
+        # Output layer formula: Logits = A_norm * H * W_2
+        h = self.gc_layer_2(h)
+        y_pred = torch.spmm(adj, h)
         return y_pred
 
     # backward error propagation will be implemented by pytorch automatically
     # so we don't need to define the error backpropagation function here
 
-    def train_model(self, X, y):
+    def train_model(self, graph_data, split_data):
         # check here for the torch.optim doc: https://pytorch.org/docs/stable/optim.html
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=5e-4)
         # check here for the nn.CrossEntropyLoss doc: https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
         loss_function = nn.CrossEntropyLoss()
 
-        # It defines the size of the mini-batch (Maintained at 32 for memory protection)
-        batch_size = 32
         # For the plot
         loss_history = []
+        
+        # Extract the monolithic graph feature structures and target classification index vectors
+        X = graph_data['X']
+        y = graph_data['y']
+        adj = graph_data['utility']['A']
+        
+        # Extract train and validation positioning index slices from data partitions
+        idx_train = split_data['idx_train']
+        idx_val = split_data['idx_val']
 
-        # Keep dataset arrays as flat, raw NumPy structures instead of giant Tensor object allocations.
-        X_array = np.array(X)
-        y_array = np.array(y)
-        num_samples = X_array.shape[0]
-
-        # it will be an iterative gradient updating process using mini-batches
+        # Graph learning updates the complete network simultaneously; processing operates over full-graph cycles
         for epoch in range(self.max_epoch):
-            # Shuffle raw numpy index pointers to avoid creating duplicated tensor structures
-            indices = np.random.permutation(num_samples)
-            X_shuffled = X_array[indices]
-            y_shuffled = y_array[indices]
+            self.train()
             
-            epoch_loss = 0.0
+            # get the output through forward propagation across the absolute complete network space
+            y_pred = self.forward(X, adj)
+            
+            # calculate the training loss exclusively over the allocated stratified training nodes mask
+            train_loss = loss_function(y_pred[idx_train], y[idx_train])
 
-            # mini-batch iteration
-            for i in range(0, num_samples, batch_size):
-                # Slice smaller partitions from raw arrays and construct Tensors dynamically on-the-fly
-                X_batch = torch.LongTensor(X_shuffled[i : i + batch_size])
-                y_batch = torch.LongTensor(y_shuffled[i : i + batch_size])
+            # check here for the gradient init doc: https://pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html
+            optimizer.zero_grad()
+            # do the error backpropagation to calculate the gradients
+            train_loss.backward()
+            # update the variables according to the optimizer and the gradients
+            optimizer.step()
 
-                # get the output through forward propagation
-                y_pred = self.forward(X_batch)
-                # calculate the training loss for the current batch
-                train_loss = loss_function(y_pred, y_batch)
+            # Explicitly isolate scalar float numbers via .item() to preserve memory overhead
+            loss_history.append(train_loss.item())
 
-                # check here for the gradient init doc: https://pytorch.org/docs/stable/generated/torch.optim.Optimizer.zero_grad.html
-                optimizer.zero_grad()
-                # do the error backpropagation to calculate the gradients
-                train_loss.backward()
-                # update the variables according to the optimizer and the gradients
-                optimizer.step()
-
-                # Explicitly isolate scalar float numbers via .item() to preserve memory overhead
-                epoch_loss += train_loss.item()
-
-            # Record the average loss of all batches for plotting
-            avg_loss = epoch_loss / (num_samples / batch_size)
-            loss_history.append(avg_loss)
-
-            if epoch % 5 == 0:
-                # Calculate accuracy on the last batch of the epoch for tracking
-                pred_labels = y_pred.max(1)[1]
-                acc = (pred_labels == y_batch).float().mean()
-                print(f"Epoch {epoch} | Batch Acc: {acc.item():.4f} | Avg Loss: {avg_loss:.4f}")
+            if epoch % 20 == 0:
+                self.eval()
+                with torch.no_grad():
+                    val_outputs = self.forward(X, adj)
+                    pred_labels = val_outputs[idx_train].max(1)[1]
+                    acc = (pred_labels == y[idx_train]).float().mean()
+                    print(f"Epoch {epoch:03d} | Train Mask Acc: {acc.item():.4f} | Full-Graph Loss: {train_loss.item():.4f}")
             
         return loss_history
     
-    def test(self, X):
+    def test(self, graph_data, split_data):
         self.eval()
         
-        # Loop over the test set in mini-batches to keep memory footprints low.
-        X_array = np.array(X)
-        num_samples = X_array.shape[0]
-        batch_size = 64
-        all_predictions = []
+        X = graph_data['X']
+        adj = graph_data['utility']['A']
+        idx_test = split_data['idx_test']
         
         # disable gradient calculation for efficiency during testing
         with torch.no_grad():
-            for i in range(0, num_samples, batch_size):
-                X_batch = torch.LongTensor(X_array[i : i + batch_size])
-                y_pred = self.forward(X_batch)
-                batch_predictions = y_pred.max(1)[1].cpu().numpy()
-                all_predictions.extend(batch_predictions)
+            y_pred_full = self.forward(X, adj)
+            # Isolate predictions belonging exclusively to testing matrix coordinates
+            test_predictions = y_pred_full[idx_test].max(1)[1].cpu().numpy()
                 
         self.train() # set back to train mode after testing
-        return np.array(all_predictions)
+        return test_predictions
     
     def run(self):
         print('method running...')
         print('--start training...')
-        self.train_model(self.data['train']['X'], self.data['train']['y'])
+        # Map parameters straight out of the instructor's graph structural schema payload shapes
+        loss_history = self.train_model(self.data['graph'], self.data['train_test_val'])
         print('--start testing...')
-        pred_y = self.test(self.data['test']['X'])
-        return {'pred_y': pred_y, 'true_y': self.data['test']['y']}
+        pred_y = self.test(self.data['graph'], self.data['train_test_val'])
+        
+        # Fetch the baseline labels corresponding to your active evaluation targets
+        test_true_y = self.data['graph']['y'][self.data['train_test_val']['idx_test']].cpu().numpy()
+        return {'pred_y': pred_y, 'true_y': test_true_y, 'loss_history': loss_history}

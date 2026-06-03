@@ -33,19 +33,28 @@ if 1:
         # Object initialization
         # Data Loader for stage 5 setup
         data_obj = Dataset_Loader(dName=current_dataset, dDescription=f'{current_dataset} citation network graph')
-        data_obj.dataset_source_folder_path = './data/stage_5_data/' 
+        data_obj.dataset_source_folder_path = f'./data/stage_5_data/{current_dataset}' 
         data_obj.dataset_name = current_dataset
 
         # Configure layer dimensions matching specific dataset structures
         if current_dataset == 'cora':
             feature_dim = 1433
             class_dim = 7
+            hidden_space = 16
+            dropout_p = 0.5
+            l2_decay = 1e-3  # Increased regularization to combat rapid overfitting
         elif current_dataset == 'citeseer':
             feature_dim = 3703
             class_dim = 6
+            hidden_space = 16
+            dropout_p = 0.3  # Dropped lower to keep node features stable in sparse graph regions
+            l2_decay = 5e-4
         elif current_dataset == 'pubmed':
             feature_dim = 500
             class_dim = 3
+            hidden_space = 64  # Widen capacity to process 19k+ node positions without bottlenecks
+            dropout_p = 0.5
+            l2_decay = 5e-4
 
         # Use method GCN module structure setup
         method_obj = Method_GCN(
@@ -69,6 +78,9 @@ if 1:
 
         # Running section using the modular structural layout
         setting_obj.prepare(data_obj, method_obj, result_obj, evaluate_obj)
+
+        loaded_graph_data = data_obj.load()
+        method_obj.data = loaded_graph_data
         
         # This handles parsing, message passing computations, full-graph epochs, and matrix saves
         # We catch the custom return payload structured inside our Method_GCN run method
@@ -79,8 +91,7 @@ if 1:
         loss_history = run_output['loss_history']
 
         # Evaluate metrics calculations over isolation test subsets
-        evaluate_obj.data = {'true_y': true_y, 'pred_y': pred_y}
-        metrics = evaluate_obj.evaluate()
+        metrics = evaluate_obj.evaluate(pred_y, true_y)
 
         # Print performance metrics outputs to terminal console windows
         print(f"--- {current_dataset.upper()} Test Evaluation Metrics ---")
@@ -96,7 +107,7 @@ if 1:
         plt.legend()
         plt.grid(True, linestyle='--', alpha=0.6)
         
-        # Save independent learning curve diagrams to the results directory folder
+        # Save independent learning cure diagrams to the results directory folder
         plot_save_path = f'./result/stage_5_result/gcn_{current_dataset}_learning_curve.png'
         plt.savefig(plot_save_path, dpi=150) 
         plt.close()
